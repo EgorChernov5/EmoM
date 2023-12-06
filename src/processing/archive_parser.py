@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 from sklearn.model_selection import train_test_split
 
-from .utils import check_extension
+from .utils import is_image, get_file_paths
 from .filters import fltr_human_emo
 
 
@@ -29,7 +29,7 @@ class EmoMParser:
         self.random_state = random_state
 
     def parse_archive(self, archive_dir: Path | str, dataset_dir: Path | str = Path("raw/common"),
-                      ffilter=check_extension):
+                      ffilter=is_image):
         """
         Parses the contents of an archive to a specified location.
 
@@ -57,13 +57,15 @@ class EmoMParser:
         # Replace
         self.move_dataset(temp_dp, dataset_dir)
 
-    def split_dataset(self, dataset_dir: Path | str, obj_paths: list[Path | str] = None, test_size: float = .2,
-                      shuffle=True, stratify=True):
+    def split_dataset(self, dataset_dir: Path | str, save_dir: Path | str = None, mtype: str = 'copy',
+                      obj_paths: list[Path | str] = None, test_size: float = .2, shuffle=True, stratify=True):
         """
         Splits the processing and returns paths.
 
         :param dataset_dir: the relative path to dataset.
-        :param obj_paths: list of relative paths to objects in the dataset.
+        :param save_dir: the relative path to the folder where we move the training and test objects. If None, then we do not move it.
+        :param mtype: the type of movement. It can take values {'copy', 'replace'}.
+        :param obj_paths: list of paths to objects in the dataset.
         :param test_size: should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the test split.
         :param shuffle: whether or not to shuffle the processing before splitting.
         :param stratify: if True, processing is split in a stratified fashion, using this as the class labels.
@@ -73,24 +75,35 @@ class EmoMParser:
             obj_paths = self.get_file_paths(dataset_dir)
 
         stratify = [x.parent.name for x in obj_paths] if stratify else None
-        return train_test_split(obj_paths, test_size=test_size, random_state=self.random_state, shuffle=shuffle,
-                                stratify=stratify)
+        X_train, X_test = train_test_split(obj_paths, test_size=test_size, random_state=self.random_state,
+                                           shuffle=shuffle, stratify=stratify)
+        if save_dir:
+            self.move_dataset(dataset_dir, Path(save_dir) / 'train', X_train, mtype == 'copy')
+            self.move_dataset(dataset_dir, Path(save_dir) / 'test', X_test, mtype == 'copy')
 
-    def prepare_dataset(self, dataset_dir: Path | str, save_dir: Path | str, ffilter=fltr_human_emo,
-                        obj_paths: list[Path | str] = None):
+        return X_train, X_test
+
+    def prepare_dataset(self, dataset_dir: Path | str, save_dir: Path | str, quarantine_dir: Path | str = None,
+                        ffilter=fltr_human_emo, obj_paths: list[Path | str] = None) -> tuple[list[Path | str], list[Path | str]]:
         """
         The function that filters the processing, there are objects that are selected in the "ffilter" function.
 
-        :param ffilter: link to the filtering function.
         :param dataset_dir: the relative path to the dataset.
-        :param save_dir: the relative path to the folder where we save the appropriate objects.
-        :param obj_paths: list of relative paths to objects in the dataset.
+        :param save_dir: the path to the folder where to save.
+        :param quarantine_dir: the path to the folder where the data that requires additional processing is saved.
+        :param ffilter: link to the filtering function.
+        :param obj_paths: list of paths to objects in the dataset.
+        :return: save_paths, quarantine_paths
         """
         if obj_paths is None:
             obj_paths = self.get_file_paths(dataset_dir)
 
-        for obj_path in obj_paths:
-            ffilter(obj_path, self.data_dir / save_dir)
+        save_paths, quarantine_paths = ffilter(obj_paths)
+        self.move_dataset(dataset_dir, save_dir, save_paths, True, True)
+        if quarantine_dir:
+            self.move_dataset(dataset_dir, quarantine_dir, quarantine_paths, True, True)
+
+        return save_paths, quarantine_paths
 
     def get_file_paths(self, dataset_dir: Path | str) -> list[Path]:
         """
@@ -100,7 +113,8 @@ class EmoMParser:
         :return: obj_paths
         """
         dataset_path = self.data_dir / dataset_dir
-        return [obj_path for obj_path in dataset_path.glob("**/*") if obj_path.is_file()]
+        file_paths = get_file_paths(dataset_path)
+        return [file_path for file_path in file_paths if is_image(file_path)]
 
     def move_dataset(self, src_dir: Path | str, dst_dir: Path | str, obj_paths: list[Path | str] = None,
                      copy_dataset=False, save_structure=False):
@@ -109,7 +123,7 @@ class EmoMParser:
 
         :param src_dir: the source folder.
         :param dst_dir: the destination folder.
-        :param obj_paths: list of relative paths to objects in the dataset.
+        :param obj_paths: list of absolute or relative paths to objects in the dataset.
         :param copy_dataset: if True, copies the processing.
         :param save_structure: if True, keeps the folder structure.
         """
@@ -118,11 +132,14 @@ class EmoMParser:
             obj_paths = self.get_file_paths(src_dir)
 
         for obj_path in obj_paths:
+            obj_path = Path(str(obj_path).split(str(self.data_dir))[-1][1:])
+            print(obj_path)
             if save_structure:
-                residual_path = str(obj_path).split(str(src_dir))[-1][1:]
-                label_path = self.data_dir / dst_dir / Path(residual_path).parent
+                residual_path = Path(str(obj_path).split(str(Path(src_dir)))[-1][1:])
+                print(residual_path)
+                label_path = self.data_dir / dst_dir / residual_path.parent
             else:
-                label_path = self.data_dir / dst_dir / Path(obj_path).parent.name
+                label_path = self.data_dir / dst_dir / obj_path.parent.name
 
             label_path.mkdir(parents=True, exist_ok=True)
             if copy_dataset:
