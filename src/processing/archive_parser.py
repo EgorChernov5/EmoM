@@ -2,6 +2,7 @@ import zipfile
 from pathlib import Path
 import shutil
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
 from .utils import is_image, get_file_paths
 from .filters import fltr_human_emo
@@ -40,19 +41,25 @@ class EmoMParser:
         dataset_path = self.data_dir / dataset_dir
         dataset_path.mkdir(parents=True, exist_ok=True)
         temp_dp = dataset_path / "temp"
-        temp_dp.mkdir()
+        temp_dp.mkdir(parents=True, exist_ok=True)
         # Extract
+        print("Extract files to temp folder...")
         with zipfile.ZipFile(self.data_dir / archive_dir, 'r') as z:
             obj_paths = list(filter(ffilter, z.namelist()))
             z.extractall(path=temp_dp, members=obj_paths)
 
         # Rename
-        for i, obj_path in enumerate(obj_paths):
+        class_folders = set()
+        i = 1
+        for obj_path in tqdm(obj_paths, desc="Renaming files"):
             obj_path = Path(obj_path)
-            label_dir = obj_path.parent
-            new_filename = f"{Path(archive_dir).name.split('.')[0]}_image_{i + 1}.{obj_path.name.split('.')[-1]}"
-            (temp_dp / obj_path).rename(temp_dp / label_dir / new_filename)
-            (temp_dp / label_dir).rename(temp_dp / label_dir.parent / self.FOLDER_TO_LABEL[label_dir.name.lower()])
+            new_filename = f"{Path(dataset_path).name}_image_{i}.{obj_path.name.split('.')[-1]}"
+            (temp_dp / obj_path).rename(temp_dp / obj_path.parent / new_filename)
+            class_folders.add(obj_path.parent)
+            i += 1
+
+        for class_folder in tqdm(class_folders, desc="Renaming folders"):
+            (temp_dp / class_folder).rename(temp_dp / class_folder.parent / self.FOLDER_TO_LABEL[class_folder.name.lower()])
 
         # Replace
         self.move_dataset(temp_dp, dataset_dir)
@@ -131,9 +138,8 @@ class EmoMParser:
         if obj_paths is None:
             obj_paths = self.get_file_paths(src_dir)
 
-        for obj_path in obj_paths:
+        for obj_path in tqdm(obj_paths, desc="Moving"):
             obj_path = Path(str(obj_path).split(str(self.data_dir))[-1][1:])
-            print(obj_path)
             if save_structure:
                 residual_path = Path(str(obj_path).split(str(Path(src_dir)))[-1][1:])
                 print(residual_path)
@@ -150,6 +156,8 @@ class EmoMParser:
         # Delete empty dirs
         if not copy_dataset:
             self.delete_dataset(src_dir)
+
+        print("Complete!")
 
     def delete_dataset(self, dataset_dir: Path | str):
         """
