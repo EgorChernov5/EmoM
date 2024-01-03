@@ -142,7 +142,6 @@ class EmoMParser:
             obj_path = Path(str(obj_path).split(str(self.data_dir))[-1][1:])
             if save_structure:
                 residual_path = Path(str(obj_path).split(str(Path(src_dir)))[-1][1:])
-                print(residual_path)
                 label_path = self.data_dir / dst_dir / residual_path.parent
             else:
                 label_path = self.data_dir / dst_dir / obj_path.parent.name

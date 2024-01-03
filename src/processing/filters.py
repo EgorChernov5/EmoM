@@ -21,7 +21,7 @@ def fltr_human_emo(image_paths: list[Path | str]) -> tuple[list[Path | str], lis
         img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
         results = m.detect_emotion_for_single_frame(img)
         for result in results:
-            if result['emo_label'] == image_path.parent.name and result['emo_proba'] > .6:
+            if result['emo_label'] == image_path.parent.name and result['emo_proba'] > .9:
                 save_paths += [image_path]
                 break
 
