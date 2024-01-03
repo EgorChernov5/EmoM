@@ -64,14 +64,14 @@ class EmoMParser:
         # Replace
         self.move_dataset(temp_dp, dataset_dir)
 
-    def split_dataset(self, dataset_dir: Path | str, save_dir: Path | str = None, mtype: str = 'copy',
+    def split_dataset(self, dataset_dir: Path | str, save_dir: Path | str = None, copy_dataset=True,
                       obj_paths: list[Path | str] = None, test_size: float = .2, shuffle=True, stratify=True):
         """
         Splits the processing and returns paths.
 
         :param dataset_dir: the relative path to dataset.
         :param save_dir: the relative path to the folder where we move the training and test objects. If None, then we do not move it.
-        :param mtype: the type of movement. It can take values {'copy', 'replace'}.
+        :param copy_dataset: the type of movement.
         :param obj_paths: list of paths to objects in the dataset.
         :param test_size: should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the test split.
         :param shuffle: whether or not to shuffle the processing before splitting.
@@ -85,8 +85,8 @@ class EmoMParser:
         X_train, X_test = train_test_split(obj_paths, test_size=test_size, random_state=self.random_state,
                                            shuffle=shuffle, stratify=stratify)
         if save_dir:
-            self.move_dataset(dataset_dir, Path(save_dir) / 'train', X_train, mtype == 'copy')
-            self.move_dataset(dataset_dir, Path(save_dir) / 'test', X_test, mtype == 'copy')
+            self.move_dataset(dataset_dir, Path(save_dir) / 'train', X_train, copy_dataset)
+            self.move_dataset(dataset_dir, Path(save_dir) / 'test', X_test, copy_dataset)
 
         return X_train, X_test
 
@@ -112,16 +112,17 @@ class EmoMParser:
 
         return save_paths, quarantine_paths
 
-    def get_file_paths(self, dataset_dir: Path | str) -> list[Path]:
+    def get_file_paths(self, dataset_dir: Path | str, ffilter=is_image) -> list[Path]:
         """
         Returns a list of paths to objects in the dataset.
 
         :param dataset_dir: the relative path to the dataset.
+        :param ffilter: a function that shows which objects to extract.
         :return: obj_paths
         """
         dataset_path = self.data_dir / dataset_dir
-        file_paths = get_file_paths(dataset_path)
-        return [file_path for file_path in file_paths if is_image(file_path)]
+        file_paths = [obj_path for obj_path in Path(dataset_path).glob("**/*") if obj_path.is_file()]
+        return [file_path for file_path in file_paths if ffilter(file_path)]
 
     def move_dataset(self, src_dir: Path | str, dst_dir: Path | str, obj_paths: list[Path | str] = None,
                      copy_dataset=False, save_structure=False):
@@ -142,7 +143,6 @@ class EmoMParser:
             obj_path = Path(str(obj_path).split(str(self.data_dir))[-1][1:])
             if save_structure:
                 residual_path = Path(str(obj_path).split(str(Path(src_dir)))[-1][1:])
-                print(residual_path)
                 label_path = self.data_dir / dst_dir / residual_path.parent
             else:
                 label_path = self.data_dir / dst_dir / obj_path.parent.name
@@ -176,3 +176,7 @@ class EmoMParser:
             except OSError:
                 print(f"LOG: {obj_dir} is not empty...")
                 continue
+
+    def merge_datasets(self, dataset_dirs: list[Path | str], save_dir: Path | str, copy_dataset=True):
+        for dataset_dir in dataset_dirs:
+            self.move_dataset(dataset_dir, save_dir, copy_dataset=copy_dataset)

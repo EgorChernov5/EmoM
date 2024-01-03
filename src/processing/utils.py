@@ -9,7 +9,7 @@ def is_image(file_name: Path | str):
     :return:
     """
     valid = ['bmp', 'dib', 'jpeg', 'jpg', 'jpe', 'jp2', 'png', 'webp', 'pbm', 'pgm', 'ppm',
-             'pxm', 'pnm', 'pfm', 'sr', 'ras', 'tiff', 'tif', 'exr', 'hdr', 'pic']
+             'pxm', 'pnm', 'pfm', 'sr', 'ras', 'tiff', 'tif', 'exr', 'hdr', 'pic', 'JPG']
     return str(file_name).split('.')[-1] in valid
 
 
